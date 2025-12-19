@@ -4,15 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hệ Thống Quản Lý Thi</title>
+    <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Chart.js (Vẽ biểu đồ) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
     <style>
         body { font-family: 'Roboto', sans-serif; background-color: #f4f6f9; font-size: 14px; }
         
-        /* Màn hình đăng nhập */
-        #login-screen { height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .footer-credit { margin-top: 20px; color: #6c757d; font-size: 0.9rem; font-style: italic; }
-
         /* Giao diện chính */
         .sidebar { height: 100vh; overflow-y: auto; background: white; border-right: 1px solid #ddd; display: flex; flex-direction: column; }
         .exam-list-container { flex-grow: 1; overflow-y: auto; }
@@ -53,6 +54,13 @@
         .analysis-section { margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 15px; }
         .question-badge { font-size: 0.85rem; margin-right: 5px; margin-bottom: 5px; display: inline-block; padding: 5px 10px; }
 
+        /* Loading */
+        #loading-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.9); z-index: 9999;
+            display: flex; justify-content: center; align-items: center; flex-direction: column;
+        }
+
         @media (max-width: 768px) {
             .sidebar { height: auto; max-height: 250px; border-bottom: 2px solid #ccc; }
             .sticky-col-2 { left: 100px; min-width: 50px; } 
@@ -63,25 +71,17 @@
 </head>
 <body>
 
-    <!-- 1. Màn hình Đăng nhập -->
-    <div id="login-screen">
-        <div class="card p-4 shadow" style="width: 350px;">
-            <h4 class="text-center mb-3">Đăng Nhập Quản Trị</h4>
-            <input type="password" id="passwordInput" class="form-control mb-3" placeholder="Nhập mật khẩu...">
-            <div class="form-check mb-3">
-                <input class="form-check-input" type="checkbox" id="rememberMe">
-                <label class="form-check-label small" for="rememberMe">Lưu mật khẩu cho lần sau</label>
-            </div>
-            <button onclick="login()" class="btn btn-primary w-100" id="btnLogin">Truy cập</button>
-            <p id="loginMsg" class="text-danger mt-2 text-center small"></p>
-        </div>
-        <div class="footer-credit">Design by QuânPT</div>
+    <div id="loading-overlay">
+        <div class="spinner-border text-primary mb-3" role="status"></div>
+        <h5 class="fw-bold text-primary">Đang tải dữ liệu thi...</h5>
+        <small class="text-muted">Design by QuânPT</small>
+        <p id="error-msg" class="text-danger mt-3 fw-bold"></p>
     </div>
 
-    <!-- 2. Màn hình Dashboard -->
+    <!-- Dashboard -->
     <div id="dashboard" class="container-fluid d-none">
         <div class="row">
-            <!-- Cột trái: Tìm kiếm & Danh sách -->
+            <!-- Cột trái -->
             <div class="col-md-3 col-lg-2 sidebar p-0">
                 <div class="p-3 bg-dark text-white fw-bold">QUẢN LÝ THI</div>
                 <div class="p-2 border-bottom">
@@ -92,16 +92,19 @@
                 </div>
             </div>
 
-            <!-- Cột phải: Chi tiết -->
+            <!-- Cột phải -->
             <div class="col-md-9 col-lg-10 p-3" style="height: 100vh; overflow-y: auto;">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 id="current-exam-title" class="fw-bold text-primary m-0">Chọn đề thi để xem kết quả</h5>
+                    <!-- Nút xem biểu đồ -->
+                    <div>
+                         <button onclick="showChart()" class="btn btn-outline-primary btn-sm me-2 d-none" id="btnShowChart">📊 Xem phổ điểm</button>
+                    </div>
                 </div>
 
-                <!-- Thống kê tổng quan -->
+                <!-- Tổng quan -->
                 <div id="overview-section" class="d-none">
                     <div class="overview-card">
-                        <!-- Chỉ số cơ bản -->
                         <div class="row mb-2">
                             <div class="col-3 stat-box">
                                 <div class="stat-value" id="stat-count">0</div>
@@ -121,18 +124,17 @@
                             </div>
                         </div>
 
-                        <!-- Phân tích câu hỏi (3 Mức độ) -->
                         <div class="analysis-section row">
                             <div class="col-md-4 mb-2">
-                                <h6 class="fw-bold text-success small text-uppercase">Dễ (Sai ≤ 30%)</h6>
+                                <h6 class="fw-bold text-success small text-uppercase">Các câu Dễ (Tỉ lệ Sai ≤ 30%)</h6>
                                 <div id="list-easy"></div>
                             </div>
                             <div class="col-md-4 mb-2">
-                                <h6 class="fw-bold text-warning small text-uppercase" style="color: #fd7e14 !important;">Trung bình (30-70%)</h6>
+                                <h6 class="fw-bold text-warning small text-uppercase" style="color: #fd7e14 !important;">Các câu Trung bình (Tỉ lệ Sai 30-70%)</h6>
                                 <div id="list-medium"></div>
                             </div>
                             <div class="col-md-4 mb-2">
-                                <h6 class="fw-bold text-danger small text-uppercase">Khó (Sai ≥ 70%)</h6>
+                                <h6 class="fw-bold text-danger small text-uppercase">Các câu Khó (Tỉ lệ Sai ≥ 70%)</h6>
                                 <div id="list-hard"></div>
                             </div>
                         </div>
@@ -140,7 +142,21 @@
                 </div>
                 
                 <div id="main-content" class="table-container shadow-sm bg-white rounded">
-                    <!-- Bảng kết quả -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Biểu đồ -->
+    <div class="modal fade" id="chartModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">📊 Xem phổ điểm thi</h5>
+                    <button type="button" class="btn-close" onclick="closeChartModal()"></button>
+                </div>
+                <div class="modal-body">
+                    <canvas id="scoreChart"></canvas>
                 </div>
             </div>
         </div>
@@ -149,19 +165,17 @@
     <script>
         // === CẤU HÌNH ===
         const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxWMUa0nlWXoNqe1Jp2MSD1_uBgXSbLdALSuoZoWWJzXR-gnGS1mBDVD-FZyT2UEnFxlQ/exec"; 
+        const AUTO_PASS = "123@456";
         // ================
 
         let globalData = null; 
         let currentStudents = []; 
         let currentConfig = {};   
         let sortState = { col: null, dir: 'asc' };
+        let myChart = null; // Biến lưu biểu đồ
 
         window.onload = function() {
-            const savedPass = localStorage.getItem('quanpt_admin_pass');
-            if (savedPass) {
-                document.getElementById('passwordInput').value = savedPass;
-                document.getElementById('rememberMe').checked = true;
-            }
+            autoLogin();
         };
 
         function parseScore(str) {
@@ -175,36 +189,22 @@
             return parts[parts.length - 1].toLowerCase(); 
         }
 
-        async function login() {
-            const passInput = document.getElementById('passwordInput');
-            const rememberMe = document.getElementById('rememberMe');
-            const pass = passInput.value;
-            const btn = document.getElementById('btnLogin');
-            const msg = document.getElementById('loginMsg');
-            
-            if(!pass) return;
-            btn.innerHTML = "Đang kết nối..."; btn.disabled = true; msg.innerText = "";
-
+        async function autoLogin() {
             try {
-                // Thêm tham số t để chống cache
-                const response = await fetch(`${GOOGLE_SCRIPT_URL}?action=getAdminData&pass=${pass}&t=${new Date().getTime()}`);
+                const response = await fetch(`${GOOGLE_SCRIPT_URL}?action=getAdminData&pass=${AUTO_PASS}&t=${new Date().getTime()}`);
                 const data = await response.json();
 
                 if (data.error) {
-                    msg.innerText = data.error; btn.innerHTML = "Truy cập"; btn.disabled = false;
+                    document.getElementById('error-msg').innerText = "Lỗi Server: " + data.error;
                 } else {
-                    if (rememberMe.checked) localStorage.setItem('quanpt_admin_pass', pass);
-                    else localStorage.removeItem('quanpt_admin_pass');
-
                     globalData = data;
-                    document.getElementById('login-screen').classList.add('d-none');
+                    document.getElementById('loading-overlay').classList.add('d-none');
                     document.getElementById('dashboard').classList.remove('d-none');
                     renderExamList();
                 }
             } catch (err) {
                 console.error(err);
-                msg.innerText = "Lỗi kết nối! Kiểm tra mạng hoặc Link Script.";
-                btn.innerHTML = "Truy cập"; btn.disabled = false;
+                document.getElementById('error-msg').innerText = "Không thể kết nối! Kiểm tra Link Script.";
             }
         }
 
@@ -242,6 +242,8 @@
             document.querySelectorAll('.exam-item').forEach(el => el.classList.remove('active'));
             element.classList.add('active');
             document.getElementById('current-exam-title').innerText = `${exam.maDe} - ${exam.tenDe}`;
+            // Hiện nút xem biểu đồ
+            document.getElementById('btnShowChart').classList.remove('d-none');
             
             sortState = { col: null, dir: 'asc' };
             currentStudents = globalData.students.filter(hs => String(hs.maDe) === String(exam.maDe));
@@ -258,7 +260,6 @@
                 sortState.col = column;
                 sortState.dir = 'asc'; 
             }
-
             currentStudents.sort((a, b) => {
                 let valA, valB;
                 if (column === 'name') {
@@ -290,7 +291,6 @@
             document.getElementById('stat-max').innerText = max.toString().replace('.', ',');
             document.getElementById('stat-min').innerText = min.toString().replace('.', ',');
 
-            // --- TÍNH TOÁN & PHÂN LOẠI CÂU HỎI ---
             const questions = config.dapAn || [];
             let listEasy = [], listMedium = [], listHard = [];
             
@@ -301,7 +301,6 @@
                     try { baiLam = JSON.parse(hs.baiLamJson); } catch(e) {}
                     const ans = baiLam.find(c => c.cau == q.id);
                     let isCorrect = false;
-                    
                     if (ans) {
                         if (q.dang == 1 || q.dang == 3) {
                              if (String(ans.chon) == String(q.dapAn)) isCorrect = true;
@@ -320,17 +319,15 @@
                 else listHard.push(badgeHtml);
             });
 
-            // Hiển thị ra màn hình
             document.getElementById('list-easy').innerHTML = listEasy.length ? listEasy.join('') : '<span class="text-muted small">Không có</span>';
             document.getElementById('list-medium').innerHTML = listMedium.length ? listMedium.join('') : '<span class="text-muted small">Không có</span>';
             document.getElementById('list-hard').innerHTML = listHard.length ? listHard.join('') : '<span class="text-muted small">Không có</span>';
         }
 
-        // Hàm helper chọn màu badge theo % sai
         function getBadgeClass(percent) {
-            if (percent <= 30) return "bg-success"; // Xanh
-            if (percent < 70) return "bg-warning text-dark"; // Vàng
-            return "bg-danger"; // Đỏ
+            if (percent <= 30) return "bg-success"; 
+            if (percent < 70) return "bg-warning text-dark"; 
+            return "bg-danger"; 
         }
 
         function renderMatrixTable(students, examConfig) {
@@ -360,7 +357,6 @@
             });
 
             let html = '<table class="table table-bordered table-hover mb-0">';
-            
             let iconName = sortState.col === 'name' ? (sortState.dir === 'asc' ? '▲' : '▼') : '↕';
             let iconScore = sortState.col === 'score' ? (sortState.dir === 'asc' ? '▲' : '▼') : '↕';
             
@@ -369,7 +365,6 @@
             html += `<th class="sticky-col-2 sortable" onclick="sortTable('score')">Điểm <span class="sort-icon">${iconScore}</span></th>`;
             questions.forEach(q => { html += `<th>C${q.id}</th>`; });
             html += '</tr></thead>';
-
             html += '<tbody>';
 
             html += '<tr class="sticky-row-stats">';
@@ -390,23 +385,18 @@
                 let baiLam = [];
                 try { baiLam = JSON.parse(hs.baiLamJson); } catch(e) { baiLam = []; }
                 let diemHienThi = hs.diem; 
-
                 html += `<tr>`;
                 html += `<td class="sticky-col-1 fw-bold text-start ps-2">${hs.hoTen}</td>`;
                 html += `<td class="sticky-col-2 text-primary fw-bold">${diemHienThi}</td>`;
-
                 questions.forEach((q, index) => {
                     const ans = baiLam.find(c => c.cau == q.id);
                     let display = "";
                     let cssClass = "cell-wrong"; 
                     let isCorrect = false;
-
                     if (ans) {
                         if (q.dang == 2 && Array.isArray(ans.chon)) {
                             display = ans.chon.map(val => val === true ? "Đ" : "S").join("");
-                        } else {
-                            display = ans.chon;
-                        }
+                        } else { display = ans.chon; }
                         if (q.dang == 1 || q.dang == 3) {
                              if (String(ans.chon) == String(q.dapAn)) isCorrect = true;
                         } else if (q.dang == 2) {
@@ -418,9 +408,61 @@
                 });
                 html += `</tr>`;
             });
-
             html += '</tbody></table>';
             container.innerHTML = html;
+        }
+
+        // --- HÀM VẼ BIỂU ĐỒ ---
+        function showChart() {
+            if (currentStudents.length === 0) return;
+
+            // 1. Dữ liệu phổ điểm (0-1, 1-2, ..., 9-10)
+            let distribution = new Array(10).fill(0);
+            currentStudents.forEach(hs => {
+                let s = parseScore(hs.diem);
+                let index = Math.floor(s);
+                if (index >= 10) index = 9; // Gom 10 vào nhóm 9-10
+                distribution[index]++;
+            });
+
+            // 2. Vẽ
+            const ctx = document.getElementById('scoreChart');
+            if (myChart) myChart.destroy();
+
+            myChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['0-1', '1-2', '2-3', '3-4', '4-5', '5-6', '6-7', '7-8', '8-9', '9-10'],
+                    datasets: [{
+                        label: 'Số lượng học sinh',
+                        data: distribution,
+                        backgroundColor: 'rgba(13, 110, 253, 0.7)',
+                        borderColor: 'rgba(13, 110, 253, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+                }
+            });
+
+            // 3. Hiện Modal (Thủ công)
+            document.getElementById('chartModal').classList.add('show');
+            document.getElementById('chartModal').style.display = 'block';
+            document.body.classList.add('modal-open');
+            let backdrop = document.createElement('div');
+            backdrop.className = 'modal-backdrop fade show';
+            backdrop.id = 'chartBackdrop';
+            document.body.appendChild(backdrop);
+        }
+
+        function closeChartModal() {
+            document.getElementById('chartModal').classList.remove('show');
+            document.getElementById('chartModal').style.display = 'none';
+            document.body.classList.remove('modal-open');
+            let backdrop = document.getElementById('chartBackdrop');
+            if(backdrop) backdrop.remove();
         }
     </script>
 </body>
