@@ -48,7 +48,10 @@
         .stat-box:last-child { border-right: none; }
         .stat-value { font-size: 1.2rem; font-weight: bold; color: #0d6efd; }
         .stat-label { font-size: 0.85rem; color: #6c757d; }
-        .warning-box { margin-top: 15px; padding-top: 10px; border-top: 1px dashed #ccc; color: #dc3545; font-weight: 500; }
+        
+        /* Phân tích câu hỏi */
+        .analysis-section { margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 15px; }
+        .question-badge { font-size: 0.85rem; margin-right: 5px; margin-bottom: 5px; display: inline-block; padding: 5px 10px; }
 
         @media (max-width: 768px) {
             .sidebar { height: auto; max-height: 250px; border-bottom: 2px solid #ccc; }
@@ -65,17 +68,13 @@
         <div class="card p-4 shadow" style="width: 350px;">
             <h4 class="text-center mb-3">Đăng Nhập Quản Trị</h4>
             <input type="password" id="passwordInput" class="form-control mb-3" placeholder="Nhập mật khẩu...">
-            
-            <!-- Checkbox lưu mật khẩu -->
             <div class="form-check mb-3">
                 <input class="form-check-input" type="checkbox" id="rememberMe">
                 <label class="form-check-label small" for="rememberMe">Lưu mật khẩu cho lần sau</label>
             </div>
-
             <button onclick="login()" class="btn btn-primary w-100" id="btnLogin">Truy cập</button>
             <p id="loginMsg" class="text-danger mt-2 text-center small"></p>
         </div>
-        <!-- Footer bản quyền -->
         <div class="footer-credit">Design by QuânPT</div>
     </div>
 
@@ -102,7 +101,8 @@
                 <!-- Thống kê tổng quan -->
                 <div id="overview-section" class="d-none">
                     <div class="overview-card">
-                        <div class="row">
+                        <!-- Chỉ số cơ bản -->
+                        <div class="row mb-2">
                             <div class="col-3 stat-box">
                                 <div class="stat-value" id="stat-count">0</div>
                                 <div class="stat-label">Thí sinh</div>
@@ -120,10 +120,21 @@
                                 <div class="stat-label">Thấp nhất</div>
                             </div>
                         </div>
-                        <!-- Cảnh báo câu sai nhiều -->
-                        <div id="hard-questions-box" class="warning-box d-none">
-                            <span class="text-danger">⚠️ Các câu có tỉ lệ sai ≥ 50%: </span>
-                            <span id="hard-questions-list" class="fw-bold"></span>
+
+                        <!-- Phân tích câu hỏi (3 Mức độ) -->
+                        <div class="analysis-section row">
+                            <div class="col-md-4 mb-2">
+                                <h6 class="fw-bold text-success small text-uppercase">Dễ (Sai ≤ 30%)</h6>
+                                <div id="list-easy"></div>
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <h6 class="fw-bold text-warning small text-uppercase" style="color: #fd7e14 !important;">Trung bình (30-70%)</h6>
+                                <div id="list-medium"></div>
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <h6 class="fw-bold text-danger small text-uppercase">Khó (Sai ≥ 70%)</h6>
+                                <div id="list-hard"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -141,11 +152,10 @@
         // ================
 
         let globalData = null; 
-        let currentStudents = []; // Danh sách HS đang hiển thị (để sort)
-        let currentConfig = {};   // Cấu hình đề đang chọn
-        let sortState = { col: null, dir: 'asc' }; // Trạng thái sắp xếp
+        let currentStudents = []; 
+        let currentConfig = {};   
+        let sortState = { col: null, dir: 'asc' };
 
-        // --- Xử lý Lưu mật khẩu ---
         window.onload = function() {
             const savedPass = localStorage.getItem('quanpt_admin_pass');
             if (savedPass) {
@@ -154,17 +164,15 @@
             }
         };
 
-        // Hàm tiện ích: Chuyển đổi chuỗi số (4,4 hoặc 4.4) thành số thực
         function parseScore(str) {
             if (!str) return 0;
             return parseFloat(String(str).replace(',', '.'));
         }
 
-        // Hàm tiện ích: Lấy Tên từ Họ tên (Ví dụ: Nguyễn Văn An -> An)
         function getName(fullName) {
             if (!fullName) return "";
             const parts = fullName.trim().split(" ");
-            return parts[parts.length - 1].toLowerCase(); // Lấy từ cuối cùng
+            return parts[parts.length - 1].toLowerCase(); 
         }
 
         async function login() {
@@ -178,13 +186,13 @@
             btn.innerHTML = "Đang kết nối..."; btn.disabled = true; msg.innerText = "";
 
             try {
-                const response = await fetch(`${GOOGLE_SCRIPT_URL}?action=getAdminData&pass=${pass}`);
+                // Thêm tham số t để chống cache
+                const response = await fetch(`${GOOGLE_SCRIPT_URL}?action=getAdminData&pass=${pass}&t=${new Date().getTime()}`);
                 const data = await response.json();
 
                 if (data.error) {
                     msg.innerText = data.error; btn.innerHTML = "Truy cập"; btn.disabled = false;
                 } else {
-                    // Xử lý lưu pass
                     if (rememberMe.checked) localStorage.setItem('quanpt_admin_pass', pass);
                     else localStorage.removeItem('quanpt_admin_pass');
 
@@ -235,10 +243,7 @@
             element.classList.add('active');
             document.getElementById('current-exam-title').innerText = `${exam.maDe} - ${exam.tenDe}`;
             
-            // Reset sort state khi chọn đề mới
             sortState = { col: null, dir: 'asc' };
-
-            // Lấy danh sách HS và config
             currentStudents = globalData.students.filter(hs => String(hs.maDe) === String(exam.maDe));
             try { currentConfig = JSON.parse(exam.configJson); } catch(e) { currentConfig = {}; }
             
@@ -246,35 +251,25 @@
             renderMatrixTable(currentStudents, currentConfig);
         }
 
-        // --- Hàm Sắp xếp (Logic mới) ---
         function sortTable(column) {
-            // Đảo chiều nếu click lại cột cũ
             if (sortState.col === column) {
                 sortState.dir = sortState.dir === 'asc' ? 'desc' : 'asc';
             } else {
                 sortState.col = column;
-                sortState.dir = 'asc'; // Mặc định cột mới là tăng dần
+                sortState.dir = 'asc'; 
             }
 
-            // Thực hiện sắp xếp
             currentStudents.sort((a, b) => {
                 let valA, valB;
-
                 if (column === 'name') {
-                    valA = getName(a.hoTen);
-                    valB = getName(b.hoTen);
-                    // So sánh chuỗi
+                    valA = getName(a.hoTen); valB = getName(b.hoTen);
                     return sortState.dir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
                 } 
                 else if (column === 'score') {
-                    valA = parseScore(a.diem);
-                    valB = parseScore(b.diem);
-                    // So sánh số
+                    valA = parseScore(a.diem); valB = parseScore(b.diem);
                     return sortState.dir === 'asc' ? valA - valB : valB - valA;
                 }
             });
-
-            // Vẽ lại bảng
             renderMatrixTable(currentStudents, currentConfig);
         }
 
@@ -295,9 +290,9 @@
             document.getElementById('stat-max').innerText = max.toString().replace('.', ',');
             document.getElementById('stat-min').innerText = min.toString().replace('.', ',');
 
-            // --- TÍNH TOÁN CÂU SAI NHIỀU (>50%) ---
+            // --- TÍNH TOÁN & PHÂN LOẠI CÂU HỎI ---
             const questions = config.dapAn || [];
-            let hardQuestions = [];
+            let listEasy = [], listMedium = [], listHard = [];
             
             questions.forEach(q => {
                 let wrongCount = 0;
@@ -317,19 +312,25 @@
                     if (!isCorrect) wrongCount++;
                 });
 
-                let wrongPercent = (wrongCount / count) * 100;
-                if (wrongPercent >= 50) {
-                    hardQuestions.push(`C${q.id} (${Math.round(wrongPercent)}%)`);
-                }
+                let wrongPercent = count > 0 ? (wrongCount / count) * 100 : 0;
+                let badgeHtml = `<span class="badge ${getBadgeClass(wrongPercent)} question-badge">C${q.id} (${Math.round(wrongPercent)}%)</span>`;
+
+                if (wrongPercent <= 30) listEasy.push(badgeHtml);
+                else if (wrongPercent < 70) listMedium.push(badgeHtml);
+                else listHard.push(badgeHtml);
             });
 
-            const hardBox = document.getElementById('hard-questions-box');
-            if (hardQuestions.length > 0) {
-                hardBox.classList.remove('d-none');
-                document.getElementById('hard-questions-list').innerText = hardQuestions.join(", ");
-            } else {
-                hardBox.classList.add('d-none');
-            }
+            // Hiển thị ra màn hình
+            document.getElementById('list-easy').innerHTML = listEasy.length ? listEasy.join('') : '<span class="text-muted small">Không có</span>';
+            document.getElementById('list-medium').innerHTML = listMedium.length ? listMedium.join('') : '<span class="text-muted small">Không có</span>';
+            document.getElementById('list-hard').innerHTML = listHard.length ? listHard.join('') : '<span class="text-muted small">Không có</span>';
+        }
+
+        // Hàm helper chọn màu badge theo % sai
+        function getBadgeClass(percent) {
+            if (percent <= 30) return "bg-success"; // Xanh
+            if (percent < 70) return "bg-warning text-dark"; // Vàng
+            return "bg-danger"; // Đỏ
         }
 
         function renderMatrixTable(students, examConfig) {
@@ -341,7 +342,6 @@
             const questions = examConfig.dapAn || [];
             let statsCorrectCount = new Array(questions.length).fill(0);
 
-            // Tính thống kê
             students.forEach(hs => {
                 let baiLam = [];
                 try { baiLam = JSON.parse(hs.baiLamJson); } catch(e) { baiLam = []; }
@@ -359,10 +359,8 @@
                 });
             });
 
-            // Vẽ bảng
             let html = '<table class="table table-bordered table-hover mb-0">';
             
-            // HEADER - THÊM SỰ KIỆN ONCLICK ĐỂ SORT
             let iconName = sortState.col === 'name' ? (sortState.dir === 'asc' ? '▲' : '▼') : '↕';
             let iconScore = sortState.col === 'score' ? (sortState.dir === 'asc' ? '▲' : '▼') : '↕';
             
@@ -374,7 +372,6 @@
 
             html += '<tbody>';
 
-            // Dòng thống kê tỉ lệ SAI
             html += '<tr class="sticky-row-stats">';
             html += '<td class="sticky-col-1 text-danger">Tỉ lệ sai</td>';
             html += '<td class="sticky-col-2"></td>';
@@ -389,7 +386,6 @@
             });
             html += '</tr>';
 
-            // Nội dung HS
             students.forEach(hs => {
                 let baiLam = [];
                 try { baiLam = JSON.parse(hs.baiLamJson); } catch(e) { baiLam = []; }
